@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>스위치 리셀</title>
+<style>
+  :root { --red:#e60012; --bg:#fff; --fg:#222; --sub:#777; --line:#eee; --card:#f6f6f6; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#16161a; --fg:#eee; --sub:#999; --line:#2a2a30; --card:#222228; } }
+  * { box-sizing:border-box; margin:0; }
+  body { background:#ddd; font-family:-apple-system,"Noto Sans KR",sans-serif; color:var(--fg); }
+  @media (prefers-color-scheme: dark) { body { background:#000; } }
+  #app { max-width:430px; height:100vh; margin:0 auto; background:var(--bg); display:flex; flex-direction:column; position:relative; overflow:hidden; }
+  header { padding:14px 16px; font-weight:800; font-size:18px; border-bottom:1px solid var(--line); }
+  main { flex:1; overflow-y:auto; padding:12px; }
+  nav { display:flex; border-top:1px solid var(--line); }
+  nav button { flex:1; padding:12px 0; border:0; background:none; color:var(--sub); font-size:13px; cursor:pointer; }
+  nav button.on { color:var(--red); font-weight:700; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:14px 10px; }
+  .card { cursor:pointer; position:relative; }
+  .thumb { width:100%; aspect-ratio:1; border-radius:12px; background:var(--card); object-fit:cover; display:block; }
+  .src { position:absolute; left:6px; top:6px; background:#0009; color:#fff; font-size:11px; padding:2px 6px; border-radius:6px; }
+  .heart { position:absolute; right:6px; top:4px; font-size:22px; background:none; border:0; cursor:pointer; color:#fff; text-shadow:0 0 4px #0008; }
+  .heart.on { color:#ff3b4e; }
+  .t { font-size:13px; margin-top:6px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .p { font-weight:800; font-size:15px; }
+  .g { color:#1a9e4b; font-size:12px; font-weight:600; }
+  .s { color:var(--sub); font-size:11px; }
+  .empty { text-align:center; color:var(--sub); padding:60px 0; }
+  #detail { position:absolute; inset:0; background:var(--bg); overflow-y:auto; display:none; z-index:5; }
+  #detail .top { position:sticky; top:0; display:flex; justify-content:space-between; padding:10px 12px; background:var(--bg); z-index:2; }
+  #detail .top button { border:0; background:none; font-size:24px; color:var(--fg); cursor:pointer; }
+  .pics { display:flex; overflow-x:auto; scroll-snap-type:x mandatory; }
+  .pics img { flex:0 0 100%; scroll-snap-align:center; aspect-ratio:1; object-fit:cover; background:var(--card); }
+  .body { padding:16px 16px 100px; }
+  .seller { display:flex; justify-content:space-between; align-items:center; padding-bottom:14px; border-bottom:1px solid var(--line); margin-bottom:14px; }
+  .fab { position:absolute; right:16px; bottom:20px; background:var(--red); color:#fff; padding:14px 20px; border-radius:28px; text-decoration:none; font-weight:700; box-shadow:0 4px 12px #0004; z-index:3; }
+  .sum { background:var(--card); border-radius:12px; padding:14px; margin-bottom:12px; }
+  .sum div { display:flex; justify-content:space-between; padding:3px 0; }
+  .form { display:grid; grid-template-columns:1fr 1fr 1fr auto; gap:6px; margin-bottom:12px; }
+  .form input { padding:8px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--fg); min-width:0; }
+  .form button { background:var(--red); color:#fff; border:0; border-radius:8px; padding:0 12px; cursor:pointer; }
+  .row { display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid var(--line); font-size:14px; }
+  .row button { border:0; background:none; color:var(--sub); cursor:pointer; margin-left:8px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header id="title"></header>
+  <main id="main"></main>
+  <nav id="nav"></nav>
+  <div id="detail"></div>
+</div>
+<script>
+const $ = s => document.querySelector(s);
+const won = n => Number(n || 0).toLocaleString('ko-KR') + '원';
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const safeUrl = u => /^https?:\/\//.test(u) ? u : '#';
+const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
+const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+
+let items = [], favs = new Set(load('favs', [])), ledger = load('ledger', []), tab = 'home';
+const TABS = [['home', '🏠 홈'], ['fav', '❤️ 즐겨찾기'], ['book', '📒 가계부']];
+
+const img = (u, cls = '') => `<img class="${cls}" loading="lazy" referrerpolicy="no-referrer" src="${esc(u)}" onerror="this.style.visibility='hidden'">`;
+const profit = it => (it.market_price || 0) - it.price;
+
+function card(it) {
+  return `<div class="card" onclick="openDetail('${esc(it.id)}')">
+    ${it.images?.[0] ? img(it.images[0], 'thumb') : '<div class="thumb"></div>'}
+    <span class="src">${esc(it.source)}</span>
+    <button class="heart ${favs.has(it.id) ? 'on' : ''}" onclick="event.stopPropagation();toggleFav('${esc(it.id)}')">${favs.has(it.id) ? '♥' : '♡'}</button>
+    <div class="t">${esc(it.title)}</div>
+    <div class="p">${won(it.price)}</div>
+    ${it.market_price ? `<div class="g">예상 이득 +${won(profit(it))}</div>` : ''}
+    <div class="s">${esc(it.location)}</div></div>`;
+}
+
+function grid(list, emptyMsg) {
+  return list.length ? `<div class="grid">${list.map(card).join('')}</div>` : `<div class="empty">${emptyMsg}</div>`;
+}
+
+function book() {
+  const sold = ledger.filter(e => e.sell > 0);
+  const buy = ledger.reduce((s, e) => s + e.buy, 0);
+  const sell = sold.reduce((s, e) => s + e.sell, 0);
+  const soldBuy = sold.reduce((s, e) => s + e.buy, 0);
+  return `<div class="sum">
+      <div><span>총 매입</span><b>${won(buy)}</b></div>
+      <div><span>총 매출 (판매 완료)</span><b>${won(sell)}</b></div>
+      <div><span>실현 순이익</span><b style="color:#1a9e4b">${won(sell - soldBuy)}</b></div></div>
+    <div class="form">
+      <input id="lt" placeholder="상품명"><input id="lb" type="number" placeholder="매입가"><input id="ls" type="number" placeholder="판매가">
+      <button onclick="addLedger()">추가</button></div>
+    ${ledger.length ? ledger.map((e, i) => `<div class="row"><div>${esc(e.title)}<div class="s">${esc(e.date)} · 매입 ${won(e.buy)}</div></div>
+      <div>${e.sell > 0 ? `<b style="color:#1a9e4b">+${won(e.sell - e.buy)}</b>` : '<span style="color:#e08a00">재고</span>'}<button onclick="delLedger(${i})">✕</button></div></div>`).join('')
+      : '<div class="empty">위에서 거래를 기록하세요<br>(판매가를 비우면 재고)</div>'}`;
+}
+
+function render() {
+  $('#title').textContent = { home: '🔥 이득 매물', fav: '❤️ 즐겨찾기', book: '📒 가계부' }[tab];
+  $('#main').innerHTML = tab === 'home' ? grid(items, '조건에 맞는 매물이 아직 없어요')
+    : tab === 'fav' ? grid(items.filter(i => favs.has(i.id)), '하트한 매물이 없어요') : book();
+  $('#nav').innerHTML = TABS.map(([k, l]) => `<button class="${k === tab ? 'on' : ''}" onclick="go('${k}')">${l}</button>`).join('');
+}
+
+function go(t) { tab = t; render(); }
+function toggleFav(id) { favs.has(id) ? favs.delete(id) : favs.add(id); save('favs', [...favs]); render(); if ($('#detail').style.display === 'block') openDetail(id); }
+function addLedger() {
+  const title = $('#lt').value.trim(); if (!title) return;
+  ledger.unshift({ title, buy: +$('#lb').value || 0, sell: +$('#ls').value || 0, date: new Date().toISOString().slice(0, 10) });
+  save('ledger', ledger); render();
+}
+function delLedger(i) { ledger.splice(i, 1); save('ledger', ledger); render(); }
+
+function openDetail(id) {
+  const it = items.find(x => x.id === id); if (!it) return;
+  const d = $('#detail'); d.style.display = 'block';
+  d.innerHTML = `<div class="top"><button onclick="closeDetail()">←</button>
+      <button onclick="toggleFav('${esc(id)}')" style="color:${favs.has(id) ? '#ff3b4e' : 'inherit'}">${favs.has(id) ? '♥' : '♡'}</button></div>
+    ${it.images?.length ? `<div class="pics">${it.images.map(u => img(u)).join('')}</div>` : ''}
+    <div class="body">
+      <div class="seller"><div><b>${esc(it.seller)}</b><div class="s">${esc(it.location)} · ${esc(it.source)}</div></div>
+        <div style="text-align:right">${it.manner ? `<b style="color:#2f7df6">매너 ${it.manner}°C</b><br>` : ''}<span class="s">거래 ${it.deal_count || 0}회</span></div></div>
+      <h2 style="font-size:18px">${esc(it.title)}</h2>
+      <div class="p" style="font-size:22px;margin:6px 0">${won(it.price)}</div>
+      ${it.market_price ? `<div class="g">시세 ${won(it.market_price)} · 예상 이득 +${won(profit(it))}</div>` : ''}
+      <p style="margin-top:16px;line-height:1.6;white-space:pre-wrap">${esc(it.description) || '상세 설명이 없어요. 자세히보기로 원문을 확인하세요.'}</p></div>
+    <a class="fab" href="${esc(safeUrl(it.url))}" target="_blank" rel="noopener">자세히보기 ↗</a>`;
+}
+function closeDetail() { $('#detail').style.display = 'none'; }
+
+fetch('items.json?t=' + Date.now()).then(r => r.json()).then(j => { items = j; render(); }).catch(() => { items = []; render(); });
+render();
+</script>
+</body>
+</html>

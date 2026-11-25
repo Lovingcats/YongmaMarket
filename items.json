@@ -1,0 +1,4 @@
+[
+ {"id":"sample1","source":"번개장터","title":"닌텐도 스위치 OLED 화이트 풀박스 (샘플)","price":210000,"market_price":270000,"images":[],"url":"https://m.bunjang.co.kr","location":"서울 강남구","seller":"샘플판매자","deal_count":12,"manner":38.5,"description":"샘플 데이터예요. 크롤러가 돌면 실제 매물로 바뀝니다."},
+ {"id":"sample2","source":"당근마켓","title":"스위치 라이트 + 칩 3개 (샘플)","price":120000,"market_price":190000,"images":[],"url":"https://www.daangn.com","location":"서울 마포구","seller":"당근이웃","deal_count":5,"manner":36.5,"description":"샘플 데이터"}
+]
