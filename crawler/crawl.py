@@ -59,18 +59,31 @@ def daangn(q):
 
 
 def joongna(q):
-    # 중고나라 웹 검색 내부 API (변경될 수 있음)
-    r = requests.post("https://search-api.joongna.com/v25/search/product",
-                      json={"searchWord": q, "page": 0, "quantity": 40, "sort": "RECENT_SORT"},
-                      headers={**UA, "Content-Type": "application/json"}, timeout=15)
+    # 중고나라 웹 검색 내부 API (F12에서 캡처한 v3/search/all 인터페이스)
+    r = requests.post("https://search-api.joongna.com/v3/search/all",
+                      json={
+                          "searchWord": q, "page": 1, "quantity": 50,
+                          "sort": "RECOMMEND_SORT", "osType": 2,
+                          "firstQuantity": 50, "jnPayYn": "ALL",
+                          "adjustSearchKeyword": True,
+                          "categoryFilter": [{"categoryDepth": 0, "categorySeq": 0}],
+                          "keywordSource": "INPUT_KEYWORD", "parcelFeeYn": "ALL",
+                          "priceFilter": {"minPrice": 0, "maxPrice": 100000000},
+                          "registPeriod": "ALL", "saleYn": "SALE_N"
+                      },
+                      headers={**UA, "Content-Type": "application/json",
+                               "Origin": "https://web.joongna.com",
+                               "Referer": "https://web.joongna.com/"}, timeout=15)
     out = []
     for p in r.json().get("data", {}).get("items", []):
         seq = p["seq"]
-        out.append(dict(id=f"jn{seq}", source="중고나라", title=p["title"], price=int(p["price"] or 0),
+        # url 필드는 이미지 주소이므로 images 에 넣고, 상세 페이지 링크는 직접 구성
+        out.append(dict(id=f"jn{seq}", source="중고나라", title=p["title"],
+                        price=int(p["price"] or 0),
                         images=[p["url"]] if p.get("url") else [],
                         url=f"https://web.joongna.com/product/{seq}",
-                        location=p.get("locationNames", [""])[0] if p.get("locationNames") else "",
-                        seller=p.get("storeName", "중고나라 판매자"), description=""))
+                        location="",  # v3 인터페이스에 위치 정보가 없으면 빈 값 유지
+                        seller="중고나라 판매자", description=""))
     return out
 
 
